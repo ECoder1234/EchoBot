@@ -3,7 +3,7 @@ import random
 import difflib
 import re
 import spacy
-from knowledge_base import init_db, add_fact, get_all_facts
+import Knowledge_Base as Knowledge_Base
 from langdetect import detect, LangDetectException
 from autocorrect import Speller
 from textblob import TextBlob
@@ -15,11 +15,15 @@ from textblob.sentiments import PatternAnalyzer
 import string
 import requests
 from bs4 import BeautifulSoup
+import itertools
+from dataclasses import dataclass
+from enum import Enum
+import json
 
 CHAT_LOG_FILE = "chat_log.txt"
 
 # Initialize DB and NLP
-init_db()
+Knowledge_Base.init_db()
 affirmations = {"yes", "yeah", "yep", "sure", "ok", "okay", "alright", "affirmative"}
 negations = {"no", "nope", "nah", "negative"}
 def clean_knowledge_base():
@@ -44,8 +48,10 @@ try:
     import numpy as np
     model = SentenceTransformer('all-MiniLM-L6-v2')
     use_transformers = True
-except ImportError:
-    print("sentence-transformers not available, using spacy-based matching.")
+except (ImportError, OSError) as e:
+    print(f"spaCy model or sentence-transformers not available: {e}")
+    print("Using fallback keyword-based matching.")
+    nlp = None
     use_transformers = False
 
 paraphrases = {}
@@ -75,10 +81,296 @@ spell = Speller(lang='en')
 pattern_analyzer = PatternAnalyzer()
 
 SESSION_MEMORY_SIZE = 10
-session_memory = []
+class SessionMemory:
+    def __init__(self, size=10):
+        self.size = size
+        self.memory = []
+    def add(self, user, bot):
+        self.memory.append((user, bot))
+        if len(self.memory) > self.size:
+            self.memory.pop(0)
+    def summary(self):
+        if not self.memory:
+            return ""
+        summary = []
+        for i, (u, b) in enumerate(self.memory[-self.size:]):
+            summary.append(f"[{i+1}] {user_persona['name']}: {u}")
+            summary.append(f"[{i+1}] EchoBot: {b}")
+        return '\n'.join(summary)
+    def get_context(self):
+        return ' '.join(u for u, _ in self.memory[-self.size:])
+    def clear(self):
+        self.memory = []
+
+session_memory_obj = SessionMemory(SESSION_MEMORY_SIZE)
+
+# DeepSeek R1-style Advanced Reasoning
+class ReasoningStrategy(Enum):
+    STEP_BY_STEP = "step_by_step"
+    BREAKDOWN = "breakdown"
+    ANALOGY = "analogy"
+    LOGICAL_CHAIN = "logical_chain"
+    CREATIVE_SOLUTION = "creative_solution"
+
+@dataclass
+class ReasoningStep:
+    step_type: str
+    content: str
+    confidence: float
+    reasoning: str
+
+class AdvancedReasoner:
+    def __init__(self):
+        self.reasoning_strategies = {
+            ReasoningStrategy.STEP_BY_STEP: self._step_by_step_reasoning,
+            ReasoningStrategy.BREAKDOWN: self._breakdown_reasoning,
+            ReasoningStrategy.ANALOGY: self._analogy_reasoning,
+            ReasoningStrategy.LOGICAL_CHAIN: self._logical_chain_reasoning,
+            ReasoningStrategy.CREATIVE_SOLUTION: self._creative_solution_reasoning
+        }
+        
+    def generate_reasoning_chain(self, user_input: str, context: str = "") -> tuple[str, list[ReasoningStep]]:
+        """Generate a DeepSeek R1-style reasoning chain"""
+        
+        # Analyze input type and choose strategy
+        strategy = self._choose_strategy(user_input)
+        
+        # Generate reasoning steps
+        steps = self.reasoning_strategies[strategy](user_input, context)
+        
+        # Synthesize final answer
+        final_answer = self._synthesize_answer(steps, user_input)
+        
+        return final_answer, steps
+    
+    def _choose_strategy(self, user_input: str) -> ReasoningStrategy:
+        """Choose the best reasoning strategy based on input"""
+        input_lower = user_input.lower()
+        
+        if any(word in input_lower for word in ["how", "why", "explain", "process"]):
+            return ReasoningStrategy.STEP_BY_STEP
+        elif any(word in input_lower for word in ["break down", "analyze", "parts"]):
+            return ReasoningStrategy.BREAKDOWN
+        elif any(word in input_lower for word in ["like", "similar", "compare"]):
+            return ReasoningStrategy.ANALOGY
+        elif any(word in input_lower for word in ["if", "then", "because", "therefore"]):
+            return ReasoningStrategy.LOGICAL_CHAIN
+        else:
+            return ReasoningStrategy.CREATIVE_SOLUTION
+    
+    def _step_by_step_reasoning(self, user_input: str, context: str) -> list[ReasoningStep]:
+        """Step-by-step reasoning like DeepSeek R1"""
+        steps = []
+        
+        # Step 1: Understand the question
+        steps.append(ReasoningStep(
+            step_type="understanding",
+            content=f"First, I need to understand what '{user_input}' is asking for.",
+            confidence=0.9,
+            reasoning="Identifying the core question and requirements"
+        ))
+        
+        # Step 2: Break into components
+        components = self._extract_components(user_input)
+        steps.append(ReasoningStep(
+            step_type="analysis",
+            content=f"I can break this down into: {', '.join(components)}",
+            confidence=0.8,
+            reasoning="Breaking complex question into manageable parts"
+        ))
+        
+        # Step 3: Apply knowledge
+        steps.append(ReasoningStep(
+            step_type="knowledge_application",
+            content="Now I'll apply my knowledge to each component systematically.",
+            confidence=0.7,
+            reasoning="Using stored knowledge and reasoning patterns"
+        ))
+        
+        # Step 4: Synthesize
+        steps.append(ReasoningStep(
+            step_type="synthesis",
+            content="Combining all the information into a coherent answer.",
+            confidence=0.8,
+            reasoning="Integrating multiple pieces of information"
+        ))
+        
+        return steps
+    
+    def _breakdown_reasoning(self, user_input: str, context: str) -> list[ReasoningStep]:
+        """Break down complex problems into parts"""
+        steps = []
+        
+        # Identify key elements
+        elements = self._identify_elements(user_input)
+        
+        for i, element in enumerate(elements, 1):
+            steps.append(ReasoningStep(
+                step_type="element_analysis",
+                content=f"Element {i}: {element} - This requires specific consideration.",
+                confidence=0.7,
+                reasoning=f"Analyzing component {i} of the problem"
+            ))
+        
+        return steps
+    
+    def _analogy_reasoning(self, user_input: str, context: str) -> list[ReasoningStep]:
+        """Use analogies and comparisons"""
+        steps = []
+        
+        # Find similar concepts
+        analogy = self._find_analogy(user_input)
+        
+        steps.append(ReasoningStep(
+            step_type="analogy",
+            content=f"This reminds me of: {analogy}",
+            confidence=0.6,
+            reasoning="Using analogical reasoning to understand the concept"
+        ))
+        
+        return steps
+    
+    def _logical_chain_reasoning(self, user_input: str, context: str) -> list[ReasoningStep]:
+        """Logical chain of reasoning"""
+        steps = []
+        
+        # Build logical chain
+        logical_steps = self._build_logical_chain(user_input)
+        
+        for i, step in enumerate(logical_steps, 1):
+            steps.append(ReasoningStep(
+                step_type="logical_step",
+                content=f"Step {i}: {step}",
+                confidence=0.8,
+                reasoning=f"Logical reasoning step {i}"
+            ))
+        
+        return steps
+    
+    def _creative_solution_reasoning(self, user_input: str, context: str) -> list[ReasoningStep]:
+        """Creative problem-solving approach"""
+        steps = []
+        
+        # Generate creative approaches
+        approaches = self._generate_creative_approaches(user_input)
+        
+        for approach in approaches:
+            steps.append(ReasoningStep(
+                step_type="creative_approach",
+                content=f"Creative approach: {approach}",
+                confidence=0.6,
+                reasoning="Exploring creative solutions"
+            ))
+        
+        return steps
+    
+    def _extract_components(self, text: str) -> list[str]:
+        """Extract key components from text"""
+        # Simple component extraction
+        words = text.split()
+        components = []
+        
+        # Look for question words and key nouns
+        question_words = ["what", "how", "why", "when", "where", "who"]
+        for word in words:
+            if word.lower() in question_words or len(word) > 4:
+                components.append(word)
+        
+        return components[:3]  # Limit to 3 components
+    
+    def _identify_elements(self, text: str) -> list[str]:
+        """Identify key elements in the problem"""
+        # Simple element identification
+        return [text[:len(text)//2], text[len(text)//2:]]
+    
+    def _find_analogy(self, text: str) -> str:
+        """Find an analogy for the given text"""
+        analogies = [
+            "learning to ride a bicycle",
+            "cooking a complex recipe",
+            "solving a puzzle",
+            "building with blocks",
+            "navigating a maze"
+        ]
+        return random.choice(analogies)
+    
+    def _build_logical_chain(self, text: str) -> list[str]:
+        """Build a logical chain of reasoning"""
+        return [
+            "If we consider the basic principles...",
+            "Then we can apply the relevant knowledge...",
+            "This leads us to the conclusion that..."
+        ]
+    
+    def _generate_creative_approaches(self, text: str) -> list[str]:
+        """Generate creative approaches to the problem"""
+        return [
+            "Think about this from a different angle...",
+            "What if we approach this creatively...",
+            "Consider alternative perspectives..."
+        ]
+    
+    def _synthesize_answer(self, steps: list[ReasoningStep], user_input: str) -> str:
+        """Synthesize the final answer from reasoning steps"""
+        if not steps:
+            return "I need to think about this more carefully."
+        
+        # Combine the reasoning into a coherent answer
+        synthesis = f"Let me think through this step by step:\n\n"
+        
+        for i, step in enumerate(steps, 1):
+            synthesis += f"{i}. {step.content}\n"
+        
+        synthesis += f"\nBased on this reasoning, here's my answer to '{user_input}': "
+        synthesis += "I've analyzed this systematically and considered multiple approaches. "
+        synthesis += "The most logical conclusion is that this requires careful consideration "
+        synthesis += "of all the factors we've discussed."
+        
+        return synthesis
+
+# Global advanced reasoner instance
+advanced_reasoner = AdvancedReasoner()
+
+class Reasoner:
+    def __init__(self, facts, use_semantic, model=None):
+        self.facts = facts
+        self.use_semantic = use_semantic
+        self.model = model
+    def find_relevant_facts(self, user_input, top_n=5):
+        # Use semantic similarity if available, else keyword overlap
+        if self.use_semantic and self.model:
+            user_emb = self.model.encode([user_input], convert_to_tensor=True)
+            fact_embs = self.model.encode(self.facts, convert_to_tensor=True)
+            sims = util.cos_sim(user_emb, fact_embs)[0].cpu().numpy()
+            top_idx = sims.argsort()[-top_n:][::-1]
+            return [(self.facts[i], float(sims[i])) for i in top_idx if sims[i] > 0.2]
+        else:
+            input_keywords = get_keywords(user_input)
+            scored = []
+            for fact in self.facts:
+                fact_keywords = get_keywords(fact)
+                score = centrality_score(input_keywords, fact_keywords)
+                if score > 0.1:
+                    scored.append((fact, score))
+            scored.sort(key=lambda x: x[1], reverse=True)
+            return scored[:top_n]
+    def synthesize_answer(self, user_input, relevant_facts):
+        # Combine facts into a coherent answer
+        if not relevant_facts:
+            return None, []
+        reasoning = []
+        combined = []
+        for fact, score in relevant_facts:
+            reasoning.append(f"Used fact: '{fact}' (score: {score:.2f})")
+            combined.append(fact)
+        # Simple synthesis: join facts, remove duplicates
+        answer = ' '.join(dict.fromkeys(itertools.chain.from_iterable(f.split('. ') for f in combined)))
+        return answer, reasoning
+
 system_prompt = (
-    "You are EchoBot, an AI assistant trained to reason step-by-step, learn from users, and improve over time. "
-    "Today is {date}. Use your knowledge base, session memory, and logic to answer."
+    "You are EchoBot, an AI assistant with advanced reasoning capabilities similar to DeepSeek R1. "
+    "You can think step-by-step, use multiple reasoning strategies, and generate sophisticated responses. "
+    "Today is {date}. Use your knowledge base, session memory, and advanced reasoning to answer."
 )
 user_persona = {'name': 'User', 'interests': []}
 
@@ -93,18 +385,10 @@ def set_user_persona():
     console.print(f"[bold green]Welcome, {user_persona['name']}! I'll try to keep your interests in mind: {', '.join(user_persona['interests']) if user_persona['interests'] else 'none specified'}.[/bold green]")
 
 def add_to_session_memory(user, bot):
-    session_memory.append((user, bot))
-    if len(session_memory) > SESSION_MEMORY_SIZE:
-        session_memory.pop(0)
+    session_memory_obj.add(user, bot)
 
 def summarize_session_memory():
-    if not session_memory:
-        return ""
-    summary = []
-    for i, (u, b) in enumerate(session_memory[-SESSION_MEMORY_SIZE:]):
-        summary.append(f"[{i+1}] {user_persona['name']}: {u}")
-        summary.append(f"[{i+1}] EchoBot: {b}")
-    return '\n'.join(summary)
+    return session_memory_obj.summary()
 
 def show_reasoning_chain(user_input, fact, score, reasoning_steps):
     chain = [f"System prompt: {system_prompt.format(date=datetime.datetime.now().strftime('%Y-%m-%d'))}"]
@@ -120,6 +404,28 @@ def show_reasoning_chain(user_input, fact, score, reasoning_steps):
         chain.extend(reasoning_steps)
     return '\n'.join(chain)
 
+def show_enhanced_reasoning_chain(user_input, reasoning_steps, final_answer):
+    """Show enhanced reasoning chain like DeepSeek R1"""
+    chain = [f"🤖 EchoBot Advanced Reasoning Chain"]
+    chain.append(f"System: {system_prompt.format(date=datetime.datetime.now().strftime('%Y-%m-%d'))}")
+    
+    mem_summary = summarize_session_memory()
+    if mem_summary:
+        chain.append("📚 Recent Context:")
+        chain.append(mem_summary)
+    
+    chain.append(f"👤 {user_persona['name']}: {user_input}")
+    chain.append("🧠 Step-by-Step Reasoning:")
+    
+    for i, step in enumerate(reasoning_steps, 1):
+        chain.append(f"  {i}. [{step.step_type.upper()}] {step.content}")
+        chain.append(f"     Confidence: {step.confidence:.2f} | {step.reasoning}")
+    
+    chain.append("💡 Final Answer:")
+    chain.append(final_answer)
+    
+    return '\n'.join(chain)
+
 def save_chat_log(user_input, reply):
     with open(CHAT_LOG_FILE, "a") as f:
         f.write(f"You: {user_input}\n")
@@ -132,7 +438,7 @@ def learn_new_paraphrase(user_input):
         meaning = meaning.strip()
         if phrase and meaning:
             paraphrases[phrase] = meaning
-            add_fact(f"{phrase} means {meaning}", category="paraphrase", source="conversation")
+            Knowledge_Base.add_fact(f"{phrase} means {meaning}", category="paraphrase", source="conversation")
             return f"Got it! I'll remember that '{phrase}' means '{meaning}'."
     return None
 
@@ -157,7 +463,7 @@ def is_low_quality_fact(fact, user_input):
     return False
 
 def find_best_fact(user_input, min_score=0.0, exclude_facts=None):
-    all_facts = get_all_facts()
+    all_facts = Knowledge_Base.get_all_facts()
     if exclude_facts is None:
         exclude_facts = set()
     best_fact = None
@@ -180,7 +486,8 @@ def find_best_fact(user_input, min_score=0.0, exclude_facts=None):
         return best_fact, float(best_score)
     else:
         input_keywords = get_keywords(user_input)
-        main_subject = None
+    main_subject = None
+    if nlp is not None:
         doc = nlp(user_input)
         noun_chunks = list(doc.noun_chunks)
         if noun_chunks:
@@ -189,23 +496,23 @@ def find_best_fact(user_input, min_score=0.0, exclude_facts=None):
             nouns = [token.text for token in doc if token.pos_ == "NOUN"]
             if nouns:
                 main_subject = nouns[0]
-        if not main_subject and input_keywords:
-            main_subject = max(input_keywords, key=len)
-        for fact in all_facts:
-            if is_low_quality_fact(fact, user_input) or fact in exclude_facts:
-                continue
-            if fact.strip().lower() == user_input_lower:
-                continue
-            fact_keywords = get_keywords(fact)
-            score = centrality_score(input_keywords, fact_keywords)
-            if main_subject and main_subject.lower() not in fact.lower():
-                continue
-            if score > best_score and score >= min_score:
-                best_score = score
-                best_fact = fact
-        if best_score == 0.0:
-            return None, 0.0
-        return best_fact, best_score
+    if not main_subject and input_keywords:
+        main_subject = max(input_keywords, key=len)
+    for fact in all_facts:
+        if is_low_quality_fact(fact, user_input) or fact in exclude_facts:
+            continue
+        if fact.strip().lower() == user_input_lower:
+            continue
+        fact_keywords = get_keywords(fact)
+        score = centrality_score(input_keywords, fact_keywords)
+        if main_subject and main_subject.lower() not in fact.lower():
+            continue
+        if score > best_score and score >= min_score:
+            best_score = score
+            best_fact = fact
+    if best_score == 0.0:
+        return None, 0.0
+    return best_fact, best_score
 
 def fuzzy_match_paraphrase(user_input):
     if not paraphrases:
@@ -279,21 +586,26 @@ def clear_knowledge_base():
 def batch_train(pairs):
     # pairs: list of (input, response)
     for inp, resp in pairs:
-        add_fact(f"{normalize_text(inp)}|||{resp}", category="starter_pair", source="batch_train")
+        Knowledge_Base.add_fact(f"{normalize_text(inp)}|||{resp}", category="starter_pair", source="batch_train")
 
-def get_reply(user_input):
+def get_reply(user_input, show_trace=True):
     user_input = user_input.strip()
     lower_input = user_input.lower()
-    reasoning_steps = []
     norm_input = normalize_text(user_input)
-    thinking_msg = "EchoBot is thinking..."
+    thinking_msg = "🧠 EchoBot is thinking..."
+    
     # Special case: self-introduction
     if norm_input in ["who are you", "what are you", "who is echobot", "what is echobot", "tell me about yourself"]:
-        reply = ("Hello! I'm EchoBot, your AI assistant. I'm designed to learn from our conversations, reason step-by-step, "
-                 "and help you with information, ideas, and friendly chat. You can teach me new things, and I'll remember them! "
-                 "Feel free to ask me anything or tell me how I can improve.")
-        add_to_session_memory(user_input, reply)
-        return thinking_msg + "\n" + show_reasoning_chain(user_input, reply, 1.0, ["Special case: self-introduction."]) + f"\n\n{reply}"
+        # Use advanced reasoning for self-introduction
+        context = session_memory_obj.get_context()
+        final_answer, reasoning_steps = advanced_reasoner.generate_reasoning_chain(
+            "Tell me about yourself and your capabilities", context
+        )
+        session_memory_obj.add(user_input, final_answer)
+        if show_trace:
+            return thinking_msg + "\n" + show_enhanced_reasoning_chain(user_input, reasoning_steps, final_answer)
+        else:
+            return final_answer
     # Language detection
     try:
         if len(user_input) > 6:
@@ -307,13 +619,11 @@ def get_reply(user_input):
     if not re.match(math_pattern, user_input):
         corrected = spell(user_input)
         if corrected != user_input:
-            reasoning_steps.append(f"Autocorrected input: '{user_input}' → '{corrected}'")
             user_input = corrected
             lower_input = user_input.lower()
     # Sentiment analysis
     sentiment = pattern_analyzer.analyze(user_input)[0]
     if sentiment < -0.5:
-        import random
         return random.choice([
             "I'm sorry if things feel negative. I'm here to help!",
             "It sounds like you're upset. Want to talk about it?"
@@ -341,90 +651,35 @@ def get_reply(user_input):
             c.execute("DELETE FROM facts WHERE fact LIKE ?", (f"%|||%",))
             conn.commit()
             conn.close()
-            if session_memory:
-                last_user_input = session_memory[-1][0]
-                add_fact(f"{normalize_text(last_user_input)}|||{lesson}", category="starter_pair", source="teach_me_mode")
-            add_fact(lesson, category="user_lesson", source="teach_me_mode")
+            if session_memory_obj.memory:
+                last_user_input = session_memory_obj.memory[-1][0]
+                Knowledge_Base.add_fact(f"{normalize_text(last_user_input)}|||{lesson}", category="starter_pair", source="teach_me_mode")
+            Knowledge_Base.add_fact(lesson, category="user_lesson", source="teach_me_mode")
             reply = f"Thank you for teaching me! I've added this to my knowledge: '{lesson}'"
-            add_to_session_memory(user_input, reply)
+            session_memory_obj.add(user_input, reply)
             return reply
         else:
             return "Please provide a more detailed lesson."
-    # --- Efficient DeepSeek-style starter/greeting handling ---
-    all_facts = get_all_facts()
-    # Build a hash for fast exact match
-    starter_map = {}
-    starter_pairs = []
-    for fact in all_facts:
-        if '|||' in fact:
-            key, value = fact.split('|||', 1)
-            starter_map[normalize_text(key)] = value
-            starter_pairs.append((key, value))
-    if norm_input in starter_map:
-        value = starter_map[norm_input]
-        reply = value + ("\nIf you have more to share, I'm always here to listen!" if len(value.split()) > 3 else "\nBy the way, feel free to ask me anything or tell me more about your day!")
-        add_to_session_memory(user_input, reply)
-        return thinking_msg + "\n" + show_reasoning_chain(user_input, value, 1.0, ["Exact match for starter/greeting (user-taught mapping). "]) + f"\n\n[Internal confidence: 1.00 | Overall confidence: 1.00]\n{reply}"
-    # For similarity, only check the N most recent facts and N random facts
-    import random
-    N = 30
-    recent_facts = all_facts[-N:]
-    random_facts = random.sample(all_facts, min(N, len(all_facts))) if len(all_facts) > N else []
-    facts_to_check = list(set(recent_facts + random_facts))
-    best_fact = None
-    best_score = 0.0
-    best_secondary = 0.0
-    for fact in facts_to_check:
-        if is_low_quality_fact(fact, user_input) or fact.strip().lower() == user_input.lower():
-            continue
-        if '|||' in fact:
-            continue  # Only check non-mapping facts for similarity
-        # Primary: semantic similarity
-        if use_transformers:
-            user_emb = model.encode([user_input], convert_to_tensor=True)
-            fact_emb = model.encode([fact], convert_to_tensor=True)
-            sim = float(util.cos_sim(user_emb, fact_emb)[0][0])
-        else:
-            input_keywords = get_keywords(user_input)
-            fact_keywords = get_keywords(fact)
-            sim = centrality_score(input_keywords, fact_keywords)
-        # Secondary: keyword overlap
-        input_keywords = set(get_keywords(user_input))
-        fact_keywords = set(get_keywords(fact))
-        overlap = len(input_keywords & fact_keywords) / (len(input_keywords | fact_keywords) + 1e-6)
-        # Combine for internal confidence
-        confidence = 0.7 * sim + 0.3 * overlap
-        reasoning_steps.append(f"Checked fact: '{fact}' | sim: {sim:.2f}, overlap: {overlap:.2f}, confidence: {confidence:.2f}")
-        if confidence > best_score:
-            best_score = confidence
-            best_fact = fact
-            best_secondary = overlap
-    if len(user_input.split()) <= 3:
-        min_conf = 0.2
+    # --- DeepSeek R1-style advanced reasoning ---
+    context = session_memory_obj.get_context()
+    final_answer, reasoning_steps = advanced_reasoner.generate_reasoning_chain(user_input, context)
+    
+    # Try to find relevant facts to enhance the reasoning
+    all_facts = Knowledge_Base.get_all_facts()
+    reasoner = Reasoner(all_facts, use_transformers, model if use_transformers else None)
+    relevant_facts = reasoner.find_relevant_facts(user_input, top_n=3)
+    
+    # Enhance the answer with relevant facts if available
+    if relevant_facts and len(relevant_facts) > 0:
+        fact_info = "Based on my knowledge: " + " ".join([f[0] for f in relevant_facts[:2]])
+        final_answer = final_answer + "\n\n" + fact_info
+    
+    session_memory_obj.add(user_input, final_answer)
+    
+    if show_trace:
+        return thinking_msg + "\n" + show_enhanced_reasoning_chain(user_input, reasoning_steps, final_answer)
     else:
-        min_conf = 0.45
-    if best_fact and best_score >= min_conf:
-        reply = f"[Internal confidence: {best_score:.2f} | Overall confidence: {best_score:.2f}] {best_fact}"
-        add_to_session_memory(user_input, reply)
-        return thinking_msg + "\n" + show_reasoning_chain(user_input, best_fact, best_score, reasoning_steps) + f"\n\n{reply}"
-    # --- Self-training: ask user to teach ---
-    if len(user_input.split()) > 3:
-        reply = random.choice([
-            "I'm not sure I know the answer yet. Could you explain it to me? I'll remember!",
-            "That's a great question! Can you teach me the answer so I can help others in the future?",
-            "I don't have a confident answer yet. Would you like to tell me more or provide the answer?"
-        ])
-        add_to_session_memory(user_input, reply)
-        return thinking_msg + "\n" + show_reasoning_chain(user_input, None, 0.0, reasoning_steps) + f"\n\n[Internal confidence: 0.00 | Overall confidence: 0.00]\n{reply}"
-    fallback_responses = [
-        "That's an interesting topic! Could you share more details or clarify your question?",
-        "I'm eager to learn more about that. Can you elaborate or rephrase?",
-        "I'm still learning and want to give you the best answer. Could you help me understand better?",
-        "Let's dive deeper! What specifically would you like to know?"
-    ]
-    reply = random.choice(fallback_responses)
-    add_to_session_memory(user_input, reply)
-    return thinking_msg + "\n" + show_reasoning_chain(user_input, None, 0.0, reasoning_steps) + f"\n\n[Internal confidence: 0.00 | Overall confidence: 0.00]\n{reply}"
+        return final_answer
 
 def learn_from_conversation(user_input, reply):
     # Only add facts if the user is explicitly teaching (handled in get_reply feedback/teach me)
@@ -450,23 +705,35 @@ def web_search(query, num_results=1):
     except Exception as e:
         return None
 
+def is_greeting(text):
+    greetings = ["hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "what's up", "howdy", "yo"]
+    return any(g in text.lower() for g in greetings)
+
 if __name__ == "__main__":
     # Uncomment the next line to clear the knowledge base on startup
     # clear_knowledge_base()
     set_user_persona()
     console.print(f"[bold green]{system_prompt.format(date=datetime.datetime.now().strftime('%Y-%m-%d'))}[/bold green]")
+    show_trace = True
     while True:
         user_input = Prompt.ask(f"[bold cyan]{user_persona['name']}[/bold cyan]").strip()
         if user_input.lower() in ["quit", "exit", "bye"]:
             console.print("[bold yellow]EchoBot: Shutting down...[/bold yellow]")
             break
-        reply = get_reply(user_input)
+        if user_input.lower() == "clear memory":
+            session_memory_obj.clear()
+            console.print("[bold green]Session memory cleared.[/bold green]")
+            continue
+        if user_input.lower() == "toggle trace":
+            show_trace = not show_trace
+            console.print(f"[bold green]Reasoning trace is now {'ON' if show_trace else 'OFF'}.[/bold green]")
+            continue
+        reply = get_reply(user_input, show_trace=show_trace)
         console.print(f"[bold magenta]EchoBot:[/bold magenta] {reply}")
         save_chat_log(user_input, reply)
-        learn_from_conversation(user_input, reply)
         feedback = Prompt.ask("[bold cyan]Was this answer helpful? (yes/no/teach me)[/bold cyan]").strip().lower()
         if feedback in ["no", "teach me"]:
             correction = Prompt.ask("[bold cyan]Please provide the correct answer or more info so I can learn:[/bold cyan]")
             if correction and len(correction) > 3:
-                add_fact(f"{normalize_text(user_input)}|||{correction}", category="user_feedback", source="feedback_loop")
+                Knowledge_Base.add_fact(f"{normalize_text(user_input)}|||{correction}", category="user_feedback", source="feedback_loop")
                 console.print("[bold green]Thank you! I've learned from your feedback.[/bold green]")

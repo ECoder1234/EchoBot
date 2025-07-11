@@ -1,7 +1,7 @@
 import sys
 import os
 import re
-from knowledge_base import init_db, add_fact, get_all_facts
+from Knowledge_Base import init_db, add_fact, get_all_facts
 
 # Set of already known facts (avoid duplicates)
 existing_facts = set(get_all_facts())

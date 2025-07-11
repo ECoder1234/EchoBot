@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EchoBot Dark UI</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #121212;
+      color: #e0e0e0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    .chat-wrapper {
+      width: 100%;
+      max-width: 480px;
+      height: 700px;
+      background: #1e1e1e;
+      border-radius: 16px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-header {
+      background: #2b2b2b;
+      padding: 20px;
+      font-size: 1.4em;
+      font-weight: bold;
+      text-align: center;
+      border-bottom: 1px solid #333;
+    }
+
+    .chat-body {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .message {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 16px;
+      line-height: 1.5;
+      word-wrap: break-word;
+      font-size: 1rem;
+    }
+
+    .bot-message {
+      background-color: #2c2c2c;
+      align-self: flex-start;
+    }
+
+    .user-message {
+      background-color: #007bff;
+      align-self: flex-end;
+      color: #fff;
+    }
+
+    .chat-input {
+      display: flex;
+      border-top: 1px solid #333;
+      background: #1a1a1a;
+      padding: 10px;
+    }
+
+    .chat-input input {
+      flex: 1;
+      background: #2b2b2b;
+      color: #fff;
+      border: none;
+      padding: 12px;
+      font-size: 1rem;
+      border-radius: 10px;
+      margin-right: 10px;
+    }
+
+    .chat-input input::placeholder {
+      color: #aaa;
+    }
+
+    .chat-input button {
+      padding: 12px 16px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .chat-input button:disabled {
+      background: #444;
+      cursor: not-allowed;
+    }
+
+    /* Scrollbar styling */
+    .chat-body::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .chat-body::-webkit-scrollbar-track {
+      background: #1e1e1e;
+    }
+
+    .chat-body::-webkit-scrollbar-thumb {
+      background-color: #555;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="chat-wrapper">
+  <div class="chat-header">EchoBot</div>
+
+  <div class="chat-body" id="chat-body">
+    <div class="bot-message message">Hi! I'm EchoBot. Ask me anything!</div>
+  </div>
+
+  <div class="chat-input">
+    <input type="text" id="chat-input" placeholder="Type your message..." autocomplete="off" />
+    <button id="send-btn">Send</button>
+  </div>
+</div>
+
+<script>
+  const chatBody = document.getElementById('chat-body');
+  const chatInput = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('send-btn');
+
+  function addMessage(text, sender) {
+    const msg = document.createElement('div');
+    msg.className = sender + '-message message';
+    msg.textContent = text;
+    chatBody.appendChild(msg);
+    chatBody.scrollTop = chatBody.scrollHeight;
+  }
+
+  function setInputState(enabled) {
+    chatInput.disabled = !enabled;
+    sendBtn.disabled = !enabled;
+  }
+
+  function sendMessage() {
+    const userMsg = chatInput.value.trim();
+    if (!userMsg) return;
+    addMessage(userMsg, 'user');
+    chatInput.value = '';
+    setInputState(false);
+    fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: userMsg, show_trace: false })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        addMessage(data.reply, 'bot');
+      } else {
+        addMessage('Error: ' + (data.error || 'No response'), 'bot');
+      }
+      setInputState(true);
+      chatInput.focus();
+    })
+    .catch(err => {
+      addMessage('Error: ' + err.message, 'bot');
+      setInputState(true);
+      chatInput.focus();
+    });
+  }
+
+  sendBtn.onclick = sendMessage;
+  chatInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') sendMessage();
+  });
+  chatInput.disabled = false;
+  sendBtn.disabled = false;
+  chatInput.focus();
+</script>
+
+</body>
+</html>
