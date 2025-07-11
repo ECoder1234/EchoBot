@@ -1,1 +1,13 @@
-textblob 
+sentence-transformers
+numpy
+scikit-learn
+torch
+transformers
+nltk
+spacy
+pandas
+textblob
+langdetect
+autocorrect
+rapidfuzz
+rich

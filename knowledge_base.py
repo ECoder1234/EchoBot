@@ -4,7 +4,7 @@ from datetime import datetime
 
 DB_FILE = 'knowledge_base.db'
 
-# Initialize the database and create the facts table if it doesn't exist
+# ✅ Create DB and table if it doesn't exist
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -20,8 +20,10 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Add a fact to the database (skip duplicates)
+# ✅ Add a new fact (ignores duplicates)
 def add_fact(fact, category=None, source=None):
+    if not fact.strip():
+        return  # ignore empty
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     date_added = datetime.now().strftime('%Y-%m-%d')
@@ -29,24 +31,25 @@ def add_fact(fact, category=None, source=None):
         c.execute('''
             INSERT OR IGNORE INTO facts (fact, category, source, date_added)
             VALUES (?, ?, ?, ?)
-        ''', (fact, category, source, date_added))
+        ''', (fact.strip(), category, source, date_added))
         conn.commit()
-    except Exception as e:
-        print(f"Error adding fact: {e}")
-    conn.close()
+    except sqlite3.Error as e:
+        print(f"[DB Error] Failed to add fact: {e}")
+    finally:
+        conn.close()
 
-# Search for facts by keyword
+# ✅ Search facts by keyword
 def search_facts(keyword):
+    if not keyword.strip():
+        return []
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute('''
-        SELECT fact FROM facts WHERE fact LIKE ?
-    ''', (f'%{keyword}%',))
+    c.execute('SELECT fact FROM facts WHERE fact LIKE ?', (f'%{keyword.strip()}%',))
     results = [row[0] for row in c.fetchall()]
     conn.close()
     return results
 
-# Get all facts
+# ✅ Get all known facts
 def get_all_facts():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -55,5 +58,8 @@ def get_all_facts():
     conn.close()
     return results
 
+# ✅ Optional: run manually
 if __name__ == '__main__':
-    init_db() 
+    print("📚 Initializing knowledge base...")
+    init_db()
+    print("✅ Database ready.")
