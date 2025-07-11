@@ -1,0 +1,62 @@
+You: hi the echobot
+EchoBot: Greetings!
+You: how are you
+EchoBot: I'm just a bot, but I'm doing well! How about you?
+You: meh im good
+EchoBot: I think this might help: meh i'm good means i'm ok
+You: yes thats correct
+EchoBot: Tell me more!
+You: about what
+EchoBot: I think this might help: what colour are apple
+You: no thats off converstion
+EchoBot: Did you mean 'of' instead of 'off'?
+You: no
+EchoBot: No.
+You: why did u say no when i said no
+EchoBot: I'm not sure how to respond to that yet.
+You: well learn
+EchoBot: Let's talk more about that.
+You: ok so learn means doing new things
+EchoBot: Hi there!
+You: i didnt say hi
+EchoBot: Nice to see you!
+You: why are you saying that
+EchoBot: I think this might help: how are you
+You: hi there echobto
+EchoBot: Did you mean 'echobot' instead of 'echobto'?
+You: 'yes
+EchoBot: Did you mean 'yes' instead of ''yes'?
+You: yes
+EchoBot: Yes.
+You: why are you SAYING YES
+EchoBot: why are you saying that
+You: BECAUSE U ARE MAKING MY BRAIN HURT
+EchoBot: I'm still learning. Can you help me understand?
+You: UR MAKING M BRAIN HURT
+EchoBot: I don't know the answer yet. Can you tell me more or rephrase?
+You: MY BRAINS GONNA EXPLODE
+EchoBot: I don't know the answer yet. Can you tell me more or rephrase?
+You: hij there
+EchoBot: Did you mean 'hi' instead of 'hij'?
+You: YEAS
+EchoBot: Let's talk more about that.
+You: ok so uhh you cant talk about yes
+EchoBot: I think this might help: why are you SAYING YES
+You: because u asked a queation and why is that in caps
+EchoBot: I think this might help: Australia is both a country and a continent.
+You: hows that relaated to everyttthing
+EchoBot: I think this might help: I'm not sure how to respond to that yet.
+You: YES thats hellpful
+EchoBot: I think this might help: yes that correct
+You: that is why are you saying that
+EchoBot: why are you saying that
+You: 'cause im asking you
+EchoBot: Did you mean 'caused' instead of ''cause'?
+You: NO
+EchoBot: Understood.
+You: so wht did u understand
+EchoBot: Did you mean 'what' instead of 'wht'?
+You: hi there echobot
+EchoBot: Let's talk more about that.
+You: i said hi
+EchoBot: I'm not sure how to respond to 'i said hi'.
