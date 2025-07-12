@@ -58,6 +58,21 @@ def get_all_facts():
     conn.close()
     return results
 
+# Efficiently get relevant facts by keywords
+
+def get_relevant_facts(keywords, limit=100):
+    if not keywords:
+        return []
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    # Build WHERE clause for multiple keywords
+    where = " OR ".join(["fact LIKE ?" for _ in keywords])
+    params = [f"%{kw}%" for kw in keywords]
+    c.execute(f'SELECT fact FROM facts WHERE {where} LIMIT ?', (*params, limit))
+    results = [row[0] for row in c.fetchall()]
+    conn.close()
+    return results
+
 # ✅ Optional: run manually
 if __name__ == '__main__':
     print("📚 Initializing knowledge base...")

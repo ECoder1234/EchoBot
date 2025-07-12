@@ -104,7 +104,7 @@ class SessionMemory:
 
 session_memory_obj = SessionMemory(SESSION_MEMORY_SIZE)
 
-# DeepSeek R1-style Advanced Reasoning
+
 class ReasoningStrategy(Enum):
     STEP_BY_STEP = "step_by_step"
     BREAKDOWN = "breakdown"
@@ -496,8 +496,8 @@ def find_best_fact(user_input, min_score=0.0, exclude_facts=None):
             nouns = [token.text for token in doc if token.pos_ == "NOUN"]
             if nouns:
                 main_subject = nouns[0]
-    if not main_subject and input_keywords:
-        main_subject = max(input_keywords, key=len)
+            if not main_subject and input_keywords:
+                main_subject = max(input_keywords, key=len)
     for fact in all_facts:
         if is_low_quality_fact(fact, user_input) or fact in exclude_facts:
             continue
@@ -510,8 +510,8 @@ def find_best_fact(user_input, min_score=0.0, exclude_facts=None):
         if score > best_score and score >= min_score:
             best_score = score
             best_fact = fact
-    if best_score == 0.0:
-        return None, 0.0
+        if best_score == 0.0:
+            return None, 0.0
     return best_fact, best_score
 
 def fuzzy_match_paraphrase(user_input):
@@ -588,7 +588,17 @@ def batch_train(pairs):
     for inp, resp in pairs:
         Knowledge_Base.add_fact(f"{normalize_text(inp)}|||{resp}", category="starter_pair", source="batch_train")
 
+def format_deepseek_r1_trace(reasoning_steps, final_answer):
+    trace = "<think>\n"
+    for i, step in enumerate(reasoning_steps, 1):
+        trace += f"Step {i}: {step.content}\n"
+    trace += f"\nReflection: Let's check if the answer makes sense.\n"
+    trace += "</think>\n"
+    trace += f"\nFinal Answer: {final_answer}"
+    return trace
+
 def get_reply(user_input, show_trace=True):
+    print("get_reply called with:", user_input)
     user_input = user_input.strip()
     lower_input = user_input.lower()
     norm_input = normalize_text(user_input)
@@ -602,10 +612,7 @@ def get_reply(user_input, show_trace=True):
             "Tell me about yourself and your capabilities", context
         )
         session_memory_obj.add(user_input, final_answer)
-        if show_trace:
-            return thinking_msg + "\n" + show_enhanced_reasoning_chain(user_input, reasoning_steps, final_answer)
-        else:
-            return final_answer
+        return format_deepseek_r1_trace(reasoning_steps, final_answer)
     # Language detection
     try:
         if len(user_input) > 6:
@@ -665,7 +672,8 @@ def get_reply(user_input, show_trace=True):
     final_answer, reasoning_steps = advanced_reasoner.generate_reasoning_chain(user_input, context)
     
     # Try to find relevant facts to enhance the reasoning
-    all_facts = Knowledge_Base.get_all_facts()
+    user_keywords = extract_keywords(user_input)
+    all_facts = Knowledge_Base.get_relevant_facts(user_keywords, limit=100)
     reasoner = Reasoner(all_facts, use_transformers, model if use_transformers else None)
     relevant_facts = reasoner.find_relevant_facts(user_input, top_n=3)
     
@@ -676,10 +684,7 @@ def get_reply(user_input, show_trace=True):
     
     session_memory_obj.add(user_input, final_answer)
     
-    if show_trace:
-        return thinking_msg + "\n" + show_enhanced_reasoning_chain(user_input, reasoning_steps, final_answer)
-    else:
-        return final_answer
+    return format_deepseek_r1_trace(reasoning_steps, final_answer)
 
 def learn_from_conversation(user_input, reply):
     # Only add facts if the user is explicitly teaching (handled in get_reply feedback/teach me)
@@ -709,6 +714,12 @@ def is_greeting(text):
     greetings = ["hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "what's up", "howdy", "yo"]
     return any(g in text.lower() for g in greetings)
 
+# Add a helper to extract keywords from user input (place after imports, before main logic)
+STOPWORDS = set(['the','be','to','of','and','a','in','that','have','i','it','for','not','on','with','he','as','you','do','at','this','but','his','by','from','they','we','say','her','she','or','an','will','my','one','all','would','there','their','what','so','up','out','if','about','who','get','which','go','me','when','make','can','like','time','no','just','him','know','take','people','into','year','your','good','some','could','them','see','other','than','then','now','look','only','come','its','over','think','also','back','after','use','two','how','our','work','first','well','way','even','new','want','because','any','these','give','day','most','us'])
+def extract_keywords(text):
+    words = [w.lower() for w in text.split() if w.isalpha() and w.lower() not in STOPWORDS]
+    return words[:5]  # limit to top 5 keywords for efficiency
+
 if __name__ == "__main__":
     # Uncomment the next line to clear the knowledge base on startup
     # clear_knowledge_base()
@@ -728,7 +739,9 @@ if __name__ == "__main__":
             show_trace = not show_trace
             console.print(f"[bold green]Reasoning trace is now {'ON' if show_trace else 'OFF'}.[/bold green]")
             continue
+        print(f"User input: {user_input}")
         reply = get_reply(user_input, show_trace=show_trace)
+        print(f"EchoBot reply: {reply}")
         console.print(f"[bold magenta]EchoBot:[/bold magenta] {reply}")
         save_chat_log(user_input, reply)
         feedback = Prompt.ask("[bold cyan]Was this answer helpful? (yes/no/teach me)[/bold cyan]").strip().lower()
